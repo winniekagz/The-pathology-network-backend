@@ -14,6 +14,8 @@ import {
 import crypto from 'crypto';
 
 import { User } from '../models/user.js';
+import nodemailer from 'nodemailer';
+import Mailgen from 'mailgen';
 
 
 import { _AccountService as AccountService } from '../services/account.service.js';
@@ -232,8 +234,58 @@ export const _deleteUser = async(req, res) => {
           const resetToken = user.getResetPasswordToken();
         await user.save()
           const resetLink = `http://${process.env.SERVER_DOMAIN}:${process.env.SERVER_PORT}${process.env.VERSION}/auth/reset-password/${resetToken}`;
+          let config = {
+              service: "gmail",
+              auth: {
+                  user: process.env.EMAIL,
+                  pass: process.env.PASSWORD
+              }
+          }
+          let transporter = nodemailer.createTransport(config);
+          let mailGenerator = new Mailgen({
+              theme: "default",
+              product: {
+                  name: "Password Reset",
+                  link: "https://mailgen.js/"
+              }
+          })
+          let response = {
+              body: {
+                  name: user.name,
+                  intro: "Have You requested for a password reset?",
+                  action: {
+                      instructions: 'Click  the button below to reset your password',
+                      button: {
+                          color: '#17224d', // Optional action button color
+                          text: 'Reset Password',
+                          link: `http://localhost:5173/reset-password/${resetToken}`
+                      }
+                  },
+                  outro: "Need help, or have questions? Just reply to this email, we'd love to help."
+              }
+          }
+          let mail = mailGenerator.generate(response);
+          let message = {
+              from: process.env.EMAIL,
+              to: email,
+              subject: "password reset",
+              html: mail
+          }
+          transporter.sendMail(message).
+              then((info) => {
+                  return res.status(201).json({ message: "mail sent successfully" }).catch((err) => {
+                      return res.status(400).json({ message: "mail not sent" })
+                  })
+                      .json({
+                          message: "message sent successfully",
+                          info: info.messageId,
+                          preview: nodemailer.getTestMessageUrl(info)
+                      })
 
-        return response(res, 200, { success: true, resetLink });
+              }).catch(() => {
+                  return res.status(400).json({ message: "message not sent" })
+              })
+        // return response(res, 200, { success: true, resetLink });
 
     } catch (e) {
         console.error(e);
